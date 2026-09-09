@@ -35,6 +35,25 @@ def minutes_link(panel):
     if len(links) != 0:
         return links[0]['href']
 
+def conference_link(panel):
+    """Return the press conference transcript URL for a meeting panel"""
+
+    # Does not return the immediate link within the panel
+    # Rather it returns the PDF URL within the press conference page of said immediate link
+
+    link = panel.find("a", string="Press Conference")
+
+    if link is not None:
+        r = requests.get(f"https://www.federalreserve.gov{link['href']}")
+        s = BeautifulSoup(r.content, "html.parser")
+
+        pdf_link = s.find("a", string=re.compile(r"Press Conference Transcript.*"))
+
+        if pdf_link is not None:
+            return pdf_link['href']
+
+    return None
+
 
 def main():
     """Scrape FOMC statement, minutes and press conference material from 2000-2026."""
@@ -52,6 +71,7 @@ def main():
         for panel in top_panels:
             statement_url = statement_link(panel)
             minutes_url = minutes_link(panel)
+            transcript_url = conference_link(panel)
 
 
 if __name__ == "__main__":
