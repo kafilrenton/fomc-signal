@@ -4,7 +4,8 @@ import requests
 from bs4 import BeautifulSoup
 
 
-# Functions to be used in main loop
+# Link extractor functions
+
 def statement_link(panel):
     """Return the statement URL for a meeting panel."""
   
@@ -61,6 +62,15 @@ def conference_link(panel):
 
     return None
 
+
+# Text extractor functions
+
+def clean_text(text):
+    """Normalise whitespace in extracted paragraph text."""
+    if text is None:
+        return ""
+    text = text.replace("\xa0", " ").replace("\r", " ").replace("\n", " ")
+    return " ".join(text.split()).strip()
 
 def main():
     """Scrape FOMC statement, minutes and press conference material from 2000-2026."""
