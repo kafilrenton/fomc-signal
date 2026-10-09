@@ -43,6 +43,7 @@ def minutes_info(panel):
 
     return None, None
 
+
 def conference_link(panel):
     """Return the press conference transcript URL for a meeting panel"""
 
@@ -71,6 +72,40 @@ def clean_text(text):
         return ""
     text = text.replace("\xa0", " ").replace("\r", " ").replace("\n", " ")
     return " ".join(text.split()).strip()
+
+
+def statement_text(url):
+    """Return cleaned statement text for a statement URL."""
+    
+    if url is None:
+        return None
+    
+    r = requests.get(f"https://www.federalreserve.gov{url}")
+    if r.status_code != 200:
+        return None
+    soup = BeautifulSoup(r.content, "html.parser")
+
+    # Text extraction route for HTML text is dependent on year of release
+
+    # Modern era 
+    article = soup.find("div", id="article")
+    if article is not None:
+        paras = [clean_text(p.get_text()) for p in article.find_all("p")]
+        text = " ".join(p for p in paras if p)
+        if "Federal Open Market Committee" in text:
+            return text
+
+    # Old era 
+    table = soup.find("table", attrs={"width": "600"})
+    if table is not None:
+        text = clean_text(table.get_text())
+
+        # Trim trailing footer
+        text = re.sub(r"\s*\d{4} Monetary policy.*$", "", text).strip()
+        return text
+
+    return None
+
 
 def main():
     """Scrape FOMC statement, minutes and press conference material from 2000-2026."""
