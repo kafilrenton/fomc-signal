@@ -14,26 +14,33 @@ def statement_link(panel):
         return link['href']
 
 
-def minutes_link(panel):
-    """Return the minutes URL for a meeting panel."""
+def minutes_info(panel):
+    """Return the minutes release date and URL for a meeting panel."""
 
     paragraphs = panel.find_all("p")
-    
+
     minutes_para = None
     for p in paragraphs:
         if "Minutes" in p.get_text():
             minutes_para = p
             break
 
+    if minutes_para is None:
+        return None, None
+
+    date = re.search(
+        r"\(Released\s+([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})\)",
+        minutes_para.get_text(),
+    )
+    date = date.groups() if date else None
+
     links = minutes_para.find_all("a")
 
-    # PDF link preferable over HTML
     for link in links:
-        if link.get_text() == "PDF":
-            return link["href"]
+        if link["href"].endswith(".htm"):
+            return link["href"], date
 
-    if len(links) != 0:
-        return links[0]['href']
+    return None, None
 
 def conference_link(panel):
     """Return the press conference transcript URL for a meeting panel"""
@@ -70,7 +77,7 @@ def main():
 
         for panel in top_panels:
             statement_url = statement_link(panel)
-            minutes_url = minutes_link(panel)
+            minutes_url, minutes_date = minutes_info(panel)
             transcript_url = conference_link(panel)
 
 
