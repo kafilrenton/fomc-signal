@@ -2,6 +2,7 @@
 import re
 import requests
 from bs4 import BeautifulSoup
+from datetime import datetime
 
 
 # Link extractor functions
@@ -29,6 +30,7 @@ def minutes_info(panel):
     if minutes_para is None:
         return None, None
 
+    # Regex for release date
     date = re.search(
         r"\(Released\s+([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})\)",
         minutes_para.get_text(),
@@ -37,6 +39,7 @@ def minutes_info(panel):
 
     links = minutes_para.find_all("a")
 
+    # HTML link over PDF (simpler with text extraction as some PDFs are split page text)
     for link in links:
         if link["href"].endswith(".htm"):
             return link["href"], date
@@ -68,6 +71,7 @@ def conference_link(panel):
 
 def clean_text(text):
     """Normalise whitespace in extracted paragraph text."""
+
     if text is None:
         return ""
     text = text.replace("\xa0", " ").replace("\r", " ").replace("\n", " ")
@@ -107,6 +111,37 @@ def statement_text(url):
     return None
 
 
+# Other functions
+
+def convert_to_iso(date_text):
+    """Convert a written date to a datetime.date object."""
+
+    if date_text is None:
+        return None
+
+    if isinstance(date_text, tuple):
+        date = date_text
+        
+    else:
+        # Regex targetted towards labelling for panels in 2000-2020
+        date = re.search(
+        r"(?:[A-Za-z]+/)?([A-Za-z]+)\s+(?:\d{1,2}-)?(\d{1,2})\s+Meeting\s+-\s+(\d{4})",
+        date_text
+        ).groups() 
+
+    month, day, year = date
+
+    # Formatting possibilites from the regex output (e.g. January 10 2000 OR Jan 10 2000)
+    for fmt in ("%B %d %Y", "%b %d %Y"):
+        try:
+            return datetime.strptime(f"{month} {day} {year}", fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+# Main implementation
+
 def main():
     """Scrape FOMC statement, minutes and press conference material from 2000-2026."""
 
@@ -121,6 +156,7 @@ def main():
         top_panels = [panel for panel in top_panels if panel.find("h5", string=re.compile("Meeting"))]
 
         for panel in top_panels:
+            meeting_date = panel.find("h5").string
             statement_url = statement_link(panel)
             minutes_url, minutes_date = minutes_info(panel)
             transcript_url = conference_link(panel)
