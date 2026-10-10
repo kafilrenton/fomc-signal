@@ -9,6 +9,13 @@ from datetime import datetime
 
 # Link extractor functions
 
+def full_url(href):
+    """Prepend the base URL unless href is already complete."""
+    
+    base = "https://www.federalreserve.gov"
+    return href if href.startswith("http") else base + href
+
+
 def statement_link(panel):
     """Return the statement URL for a meeting panel."""
   
@@ -17,34 +24,49 @@ def statement_link(panel):
     if link is not None:
         return link['href']
 
+    # Accounting for different formatting in years 2021+
+    strong = panel.find("strong", string=re.compile("Statement"))
+    if strong is not None:
+        for a in strong.find_next_siblings("a"):
+            if a.get_text() == "PDF":
+                return a["href"]
+
 
 def minutes_info(panel):
     """Return the minutes release date and URL for a meeting panel."""
 
-    paragraphs = panel.find_all("p")
+    # Regex for release date
+    date_pattern = r"\(Released\s+([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})\)"
 
+    # Old era       
+    paragraphs = panel.find_all("p")
     minutes_para = None
     for p in paragraphs:
         if "Minutes" in p.get_text():
             minutes_para = p
             break
 
-    if minutes_para is None:
+    if minutes_para is not None:
+        match = re.search(date_pattern, minutes_para.get_text())
+        date = match.groups() if match else None
+
+        for link in minutes_para.find_all("a"):
+            if link["href"].endswith(".htm"):
+                return link["href"], date
+
         return None, None
 
-    # Regex for release date
-    date = re.search(
-        r"\(Released\s+([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})\)",
-        minutes_para.get_text(),
-    )
-    date = date.groups() if date else None
+    # New era
+    strong = panel.find("strong", string=re.compile("Minutes"))
+    if strong is not None:
+        container = strong.parent
+        match = re.search(date_pattern, container.get_text())
+        date = match.groups() if match else None
 
-    links = minutes_para.find_all("a")
-
-    # HTML link over PDF (simpler with text extraction as some PDFs are split page text)
-    for link in links:
-        if link["href"].endswith(".htm"):
-            return link["href"], date
+        # HTML link over PDF (simpler with text extraction as some PDFs are split page text)
+        for link in container.find_all("a"):
+            if link.get_text() == "HTML":
+                return link["href"], date
 
     return None, None
 
@@ -56,15 +78,17 @@ def conference_link(panel):
     # Rather it returns the PDF URL within the press conference page of said immediate link
 
     link = panel.find("a", string="Press Conference")
+    if link is None:
+        return None
 
-    if link is not None:
-        r = requests.get(f"https://www.federalreserve.gov{link['href']}")
-        s = BeautifulSoup(r.content, "html.parser")
+    r = requests.get(full_url(link["href"]))
+    if r.status_code != 200:
+        return None
+    s = BeautifulSoup(r.content, "html.parser")
 
-        pdf_link = s.find("a", string=re.compile(r"Press Conference Transcript.*"))
-
-        if pdf_link is not None:
-            return pdf_link['href']
+    pdf_link = s.find("a", string=re.compile(r"Press Conference Transcript.*"))
+    if pdf_link is not None:
+        return pdf_link["href"]
 
     return None
 
@@ -80,13 +104,32 @@ def clean_text(text):
     return " ".join(text.split()).strip()
 
 
+def pdf_text(url):
+    """Return the full text of a PDF at the given URL"""
+    
+    if url is None:
+        return None
+
+    r = requests.get(full_url(url))
+    if r.status_code != 200:
+        return None
+
+    with pdfplumber.open(io.BytesIO(r.content)) as pdf:
+        text = " ".join(page.extract_text() or "" for page in pdf.pages)
+
+    return clean_text(text)
+
+
 def statement_text(url):
     """Return cleaned statement text for a statement URL."""
     
     if url is None:
         return None
+
+    if url.endswith(".pdf"):
+        return pdf_text(url)
     
-    r = requests.get(f"https://www.federalreserve.gov{url}")
+    r = requests.get(full_url(url))
     if r.status_code != 200:
         return None
     soup = BeautifulSoup(r.content, "html.parser")
@@ -119,7 +162,7 @@ def minutes_text(url):
     if url is None:
         return None
 
-    r = requests.get(f"https://www.federalreserve.gov{url}")
+    r = requests.get(full_url(url))
     if r.status_code != 200:
         return None
     soup = BeautifulSoup(r.content, "html.parser")
@@ -150,22 +193,6 @@ def minutes_text(url):
     return None
 
 
-def pdf_text(url):
-    """Return the full text of a PDF at the given URL, or None."""
-    
-    if url is None:
-        return None
-
-    r = requests.get(f"https://www.federalreserve.gov{url}")
-    if r.status_code != 200:
-        return None
-
-    with pdfplumber.open(io.BytesIO(r.content)) as pdf:
-        text = " ".join(page.extract_text() or "" for page in pdf.pages)
-
-    return clean_text(text)
-
-
 # Other functions
 
 def convert_to_iso(date_text):
@@ -175,17 +202,18 @@ def convert_to_iso(date_text):
         return None
 
     if isinstance(date_text, tuple):
-        date = date_text
-        
+        month, day, year = date_text
     else:
         # Regex targetted towards labelling for panels in 2000-2020
-        date = re.search(
-        r"(?:[A-Za-z]+/)?([A-Za-z]+)\s+(?:\d{1,2}-)?(\d{1,2})\s+Meeting\s+-\s+(\d{4})",
-        date_text
-        ).groups() 
+        match = re.search(
+            r"([A-Za-z]+)\s+(?:\d{1,2}-)?(\d{1,2})\s*(?:\([^)]*\))?\s+Meeting\s+-\s+(\d{4})",
+            date_text,
+        )
+        if match is None:
+            return None
+        month, day, year = match.groups()
 
-    month, day, year = date
-
+    month = month.split("/")[-1]
     # Formatting possibilites from the regex output (e.g. January 10 2000 OR Jan 10 2000)
     for fmt in ("%B %d %Y", "%b %d %Y"):
         try:
@@ -195,17 +223,42 @@ def convert_to_iso(date_text):
     return None
 
 
+def quick_date(panel, year):
+    """Return tuple containing date from new-era meeting panel."""
+
+    month = panel.find("div", class_=re.compile(r".*fomc-meeting__month.*")).string
+
+    # Meetings typical over two day periods, so final date is when statemtent and press conference happen,
+    # and some are meetings associated with a Summary of Economic Projections, indicated by * which need removal
+    day = re.sub(
+        r"\d{1,2}-", "",
+        panel.find("div", class_=re.compile(r".*fomc-meeting__date.*")).string,
+    ).rstrip("*") # Some meetings associated with a Summary of Economic Projections, indicated by *
+
+    return month, day, year
+
+
 # Main implementation
 
 def main():
     """Scrape FOMC statement, minutes and press conference material from 2000-2026."""
 
-    # Response loop for meeting data over years 2000-2020
-    # Filters <div>'s only relevant to meetings, excluding conference calls etc
-    for year in range(2000, 2021):
-        response = requests.get(f"https://www.federalreserve.gov/monetarypolicy/fomchistorical{year}.htm")
-        soup = BeautifulSoup(response.content, "html.parser")
+all_rows = []
 
+# Response loop for meeting data over years 2000-2026
+# Filters <div>'s only relevant to meetings, excluding conference calls etc
+for year in range(2000, 2027):
+
+    if year < 2021:
+        fed_link = f"https://www.federalreserve.gov/monetarypolicy/fomchistorical{year}.htm"
+    else:
+        fed_link = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"        
+
+    response = requests.get(fed_link)
+    soup = BeautifulSoup(response.content, "html.parser")
+
+    # Branches for recent years versus older years as the HTML is not consistent across these periods
+    if year < 2021:
         top_panels = soup.find_all("div", class_=re.compile(r"panel panel-default.*")) 
         
         top_panels = [
@@ -213,21 +266,34 @@ def main():
             if panel.find("h5", string=re.compile("Meeting"))
             and panel.find("a", string="Statement")
             and re.search(r"\(Released\s+", panel.get_text())
-        ]       
+        ]
+    else:
+        panel_marker = soup.find("a", string=f"{year}")["href"]  
+        anchor_id = panel_marker.lstrip("#")  
+        anchor = soup.find("a", id=anchor_id)
+        panel = anchor.find_parent("div", class_="panel panel-default")
+        top_panels = panel.find_all("div", class_=re.compile(r".*row fomc-meeting$"))
+        top_panels = [p for p in top_panels if p.find("strong", string=re.compile("Statement"))]
 
-        for panel in top_panels:
+    # Build one row per meeting for the CSV export
+    for panel in top_panels:
+        if year < 2021:
             meeting_date = panel.find("h5").string
-            statement_url = statement_link(panel)
-            minutes_url, minutes_date = minutes_info(panel)
-            transcript_url = conference_link(panel)
+        else:
+            meeting_date = quick_date(panel, year)
+        statement_url = statement_link(panel)
+        minutes_url, minutes_date = minutes_info(panel)
+        transcript_url = conference_link(panel)
 
-            row = {
-                "date": convert_to_iso(meeting_date),
-                "statement": statement_text(statement_url),
-                "minutes_release": convert_to_iso(minutes_date),
-                "minutes": minutes_text(minutes_url),
-                "conference": pdf_text(transcript_url),
-            }
+        row = {
+            "date": convert_to_iso(meeting_date),
+            "statement": statement_text(statement_url),
+            "minutes_release": convert_to_iso(minutes_date),
+            "minutes": minutes_text(minutes_url),
+            "conference": pdf_text(transcript_url),
+        }
+
+        all_rows.append(row)
 
 
 if __name__ == "__main__":
