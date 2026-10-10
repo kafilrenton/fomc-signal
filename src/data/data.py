@@ -192,7 +192,12 @@ def main():
 
         top_panels = soup.find_all("div", class_=re.compile(r"panel panel-default.*")) 
         
-        top_panels = [panel for panel in top_panels if panel.find("h5", string=re.compile("Meeting"))]
+        top_panels = [
+            panel for panel in top_panels
+            if panel.find("h5", string=re.compile("Meeting"))
+            and panel.find("a", string="Statement")
+            and re.search(r"\(Released\s+", panel.get_text())
+        ]       
 
         for panel in top_panels:
             meeting_date = panel.find("h5").string
@@ -205,6 +210,7 @@ def main():
                 "statement": statement_text(statement_url),
                 "minutes_release": convert_to_iso(minutes_date),
                 "minutes": minutes_text(minutes_url),
+                "conference": ...,
             }
             all_rows.append(row)
 
