@@ -111,6 +111,43 @@ def statement_text(url):
     return None
 
 
+def minutes_text(url):
+    """Return cleaned minutes body text for an HTML minutes URL"""
+
+    if url is None:
+        return None
+
+    r = requests.get(f"https://www.federalreserve.gov{url}")
+    if r.status_code != 200:
+        return None
+    soup = BeautifulSoup(r.content, "html.parser")
+
+    # Similar to statement HTMLs, formatting for the minutes is dependent on year of release
+    # Found three eras of different source code so three extraction routes
+
+    # Modern era
+    article = soup.find("div", id="article")
+    if article is not None:
+        paras = [clean_text(p.get_text()) for p in article.find_all("p")]
+        return " ".join(p for p in paras if p)
+
+    # Middle era
+    left = soup.find("div", id="leftText")
+    if left is not None:
+        paras = [clean_text(p.get_text()) for p in left.find_all("p")]
+        return " ".join(p for p in paras if p)
+
+    # Old era formatting
+    marker = soup.find("hr", attrs={"size": "+4"})
+    if marker is not None:
+        body = marker.find_next("td", attrs={"width": "600"})
+        if body is not None:
+            paras = [clean_text(p.get_text()) for p in body.find_all("p")]
+            return " ".join(p for p in paras if p)
+
+    return None
+
+
 # Other functions
 
 def convert_to_iso(date_text):
@@ -145,6 +182,8 @@ def convert_to_iso(date_text):
 def main():
     """Scrape FOMC statement, minutes and press conference material from 2000-2026."""
 
+    all_rows = []
+
     # Response loop for meeting data over years 2000-2020
     # Filters <div>'s only relevant to meetings, excluding conference calls etc
     for year in range(2000, 2021):
@@ -160,6 +199,14 @@ def main():
             statement_url = statement_link(panel)
             minutes_url, minutes_date = minutes_info(panel)
             transcript_url = conference_link(panel)
+
+            row = {
+                "date": convert_to_iso(meeting_date),
+                "statement": statement_text(statement_url),
+                "minutes_release": convert_to_iso(minutes_date),
+                "minutes": minutes_text(minutes_url),
+            }
+            all_rows.append(row)
 
 
 if __name__ == "__main__":
