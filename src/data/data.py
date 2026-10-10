@@ -1,6 +1,8 @@
 # Imports
 import re
 import requests
+import io
+import pdfplumber
 from bs4 import BeautifulSoup
 from datetime import datetime
 
@@ -148,6 +150,22 @@ def minutes_text(url):
     return None
 
 
+def pdf_text(url):
+    """Return the full text of a PDF at the given URL, or None."""
+    
+    if url is None:
+        return None
+
+    r = requests.get(f"https://www.federalreserve.gov{url}")
+    if r.status_code != 200:
+        return None
+
+    with pdfplumber.open(io.BytesIO(r.content)) as pdf:
+        text = " ".join(page.extract_text() or "" for page in pdf.pages)
+
+    return clean_text(text)
+
+
 # Other functions
 
 def convert_to_iso(date_text):
@@ -182,8 +200,6 @@ def convert_to_iso(date_text):
 def main():
     """Scrape FOMC statement, minutes and press conference material from 2000-2026."""
 
-    all_rows = []
-
     # Response loop for meeting data over years 2000-2020
     # Filters <div>'s only relevant to meetings, excluding conference calls etc
     for year in range(2000, 2021):
@@ -210,9 +226,8 @@ def main():
                 "statement": statement_text(statement_url),
                 "minutes_release": convert_to_iso(minutes_date),
                 "minutes": minutes_text(minutes_url),
-                "conference": ...,
+                "conference": pdf_text(transcript_url),
             }
-            all_rows.append(row)
 
 
 if __name__ == "__main__":
