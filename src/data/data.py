@@ -4,8 +4,13 @@ import requests
 import io
 import pdfplumber
 import csv
+from pathlib import Path
 from bs4 import BeautifulSoup
 from datetime import datetime
+
+
+# Path to output folder
+datasets = Path(__file__).resolve().parents[2] / "datasets"
 
 
 # Link extractor functions
@@ -244,82 +249,85 @@ def quick_date(panel, year):
 def main():
     """Scrape FOMC statement, minutes and press conference material from 2000-2026."""
 
-all_rows = []
+    all_rows = []
 
-# Response loop for meeting data over years 2000-2026
-# Filters <div>'s only relevant to meetings, excluding conference calls etc
-for year in range(2000, 2027):
+    # Response loop for meeting data over years 2000-2026
+    # Filters <div>'s only relevant to meetings, excluding conference calls etc
+    for year in range(2000, 2027):
 
-    if year < 2021:
-        fed_link = f"https://www.federalreserve.gov/monetarypolicy/fomchistorical{year}.htm"
-    else:
-        fed_link = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"        
-
-    response = requests.get(fed_link)
-    soup = BeautifulSoup(response.content, "html.parser")
-
-    # Branches for recent years versus older years as the HTML is not consistent across these periods
-    if year < 2021:
-        top_panels = soup.find_all("div", class_=re.compile(r"panel panel-default.*")) 
-        
-        top_panels = [
-            panel for panel in top_panels
-            if panel.find("h5", string=re.compile("Meeting"))
-            and panel.find("a", string="Statement")
-            and re.search(r"\(Released\s+", panel.get_text())
-        ]
-    else:
-        panel_marker = soup.find("a", string=f"{year}")["href"]  
-        anchor_id = panel_marker.lstrip("#")  
-        anchor = soup.find("a", id=anchor_id)
-        panel = anchor.find_parent("div", class_="panel panel-default")
-        top_panels = panel.find_all("div", class_=re.compile(r".*row fomc-meeting$"))
-        top_panels = [p for p in top_panels if p.find("strong", string=re.compile("Statement"))]
-
-    # Build one row per meeting for the CSV export
-    for panel in top_panels:
         if year < 2021:
-            meeting_date = panel.find("h5").string
+            fed_link = f"https://www.federalreserve.gov/monetarypolicy/fomchistorical{year}.htm"
         else:
-            meeting_date = quick_date(panel, year)
-        statement_url = statement_link(panel)
-        minutes_url, minutes_date = minutes_info(panel)
-        conference_url = conference_link(panel)
+            fed_link = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"        
 
-        row = {
-            "date": convert_to_iso(meeting_date),
-            "statement": statement_text(statement_url),
-            "minutes_release": convert_to_iso(minutes_date),
-            "minutes": minutes_text(minutes_url),
-            "conference": pdf_text(conference_url),
-        }
+        response = requests.get(fed_link)
+        soup = BeautifulSoup(response.content, "html.parser")
 
-        all_rows.append(row)
+        # Branches for recent years versus older years as the HTML is not consistent across these periods
+        if year < 2021:
+            top_panels = soup.find_all("div", class_=re.compile(r"panel panel-default.*")) 
+            
+            top_panels = [
+                panel for panel in top_panels
+                if panel.find("h5", string=re.compile("Meeting"))
+                and panel.find("a", string="Statement")
+                and re.search(r"\(Released\s+", panel.get_text())
+            ]
+        else:
+            panel_marker = soup.find("a", string=f"{year}")["href"]  
+            anchor_id = panel_marker.lstrip("#")  
+            anchor = soup.find("a", id=anchor_id)
+            panel = anchor.find_parent("div", class_="panel panel-default")
+            top_panels = panel.find_all("div", class_=re.compile(r".*row fomc-meeting$"))
+            top_panels = [p for p in top_panels if p.find("strong", string=re.compile("Statement"))]
 
-# CSV exports for each content type
-with open("../../datasets/statement.csv", "w", newline="", encoding="utf-8") as csvfile:
-    fieldnames = ["date", "statement"]
-    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        # Build one row per meeting for the CSV export
+        for panel in top_panels:
+            if year < 2021:
+                meeting_date = panel.find("h5").string
+            else:
+                meeting_date = quick_date(panel, year)
+            statement_url = statement_link(panel)
+            minutes_url, minutes_date = minutes_info(panel)
+            conference_url = conference_link(panel)
 
-    writer.writeheader()
-    for row in all_rows:
-        writer.writerow({"date": row["date"], "statement": row["statement"]})
+            row = {
+                "date": convert_to_iso(meeting_date),
+                "statement": statement_text(statement_url),
+                "minutes_release": convert_to_iso(minutes_date),
+                "minutes": minutes_text(minutes_url),
+                "conference": pdf_text(conference_url),
+            }
 
-with open("../../datasets/minutes.csv", "w", newline="", encoding="utf-8") as csvfile:
-    fieldnames = ["date", "minutes_release", "minutes"]
-    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            all_rows.append(row)
 
-    writer.writeheader()
-    for row in all_rows:
-        writer.writerow({"date": row["date"], "minutes_release": row["minutes_release"], "minutes": row["minutes"]})
+    # Create output folder on first run, no error if it exists already
+    datasets.mkdir(exist_ok=True)
 
-with open("../../datasets/conference.csv", "w", newline="", encoding="utf-8") as csvfile:
-    fieldnames = ["date", "conference_transcript"]
-    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    # CSV exports for each content type
+    with open(datasets/"statement.csv", "w", newline="", encoding="utf-8") as csvfile:
+        fieldnames = ["date", "statement"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
-    writer.writeheader()
-    for row in all_rows:
-        writer.writerow({"date": row["date"], "conference_transcript": row["conference"]})
+        writer.writeheader()
+        for row in all_rows:
+            writer.writerow({"date": row["date"], "statement": row["statement"]})
+
+    with open(datasets/"minutes.csv", "w", newline="", encoding="utf-8") as csvfile:
+        fieldnames = ["date", "minutes_release", "minutes"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        writer.writeheader()
+        for row in all_rows:
+            writer.writerow({"date": row["date"], "minutes_release": row["minutes_release"], "minutes": row["minutes"]})
+
+    with open(datasets/"conference.csv", "w", newline="", encoding="utf-8") as csvfile:
+        fieldnames = ["date", "conference_transcript"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        writer.writeheader()
+        for row in all_rows:
+            writer.writerow({"date": row["date"], "conference_transcript": row["conference"]})
 
 
 if __name__ == "__main__":
