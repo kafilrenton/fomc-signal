@@ -3,6 +3,7 @@ import re
 import requests
 import io
 import pdfplumber
+import csv
 from bs4 import BeautifulSoup
 from datetime import datetime
 
@@ -283,17 +284,42 @@ for year in range(2000, 2027):
             meeting_date = quick_date(panel, year)
         statement_url = statement_link(panel)
         minutes_url, minutes_date = minutes_info(panel)
-        transcript_url = conference_link(panel)
+        conference_url = conference_link(panel)
 
         row = {
             "date": convert_to_iso(meeting_date),
             "statement": statement_text(statement_url),
             "minutes_release": convert_to_iso(minutes_date),
             "minutes": minutes_text(minutes_url),
-            "conference": pdf_text(transcript_url),
+            "conference": pdf_text(conference_url),
         }
 
         all_rows.append(row)
+
+# CSV exports for each content type
+with open("../../datasets/statement.csv", "w", newline="", encoding="utf-8") as csvfile:
+    fieldnames = ["date", "statement"]
+    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+    writer.writeheader()
+    for row in all_rows:
+        writer.writerow({"date": row["date"], "statement": row["statement"]})
+
+with open("../../datasets/minutes.csv", "w", newline="", encoding="utf-8") as csvfile:
+    fieldnames = ["date", "minutes_release", "minutes"]
+    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+    writer.writeheader()
+    for row in all_rows:
+        writer.writerow({"date": row["date"], "minutes_release": row["minutes_release"], "minutes": row["minutes"]})
+
+with open("../../datasets/conference.csv", "w", newline="", encoding="utf-8") as csvfile:
+    fieldnames = ["date", "conference_transcript"]
+    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+    writer.writeheader()
+    for row in all_rows:
+        writer.writerow({"date": row["date"], "conference_transcript": row["conference"]})
 
 
 if __name__ == "__main__":
