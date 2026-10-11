@@ -7,10 +7,11 @@ import csv
 from pathlib import Path
 from bs4 import BeautifulSoup
 from datetime import datetime
+from tqdm import tqdm
 
 
 # Path to output folder
-datasets = Path(__file__).resolve().parents[2] / "datasets"
+datasets = Path(__file__).resolve().parents[2]/"datasets"
 
 
 # Link extractor functions
@@ -253,7 +254,7 @@ def main():
 
     # Response loop for meeting data over years 2000-2026
     # Filters <div>'s only relevant to meetings, excluding conference calls etc
-    for year in range(2000, 2027):
+    for year in tqdm(range(2000, 2027), desc="Scraping"):
 
         if year < 2021:
             fed_link = f"https://www.federalreserve.gov/monetarypolicy/fomchistorical{year}.htm"
@@ -331,4 +332,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nScraping interrupted. No CSVs written.")
