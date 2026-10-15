@@ -5,25 +5,28 @@ import io
 import pdfplumber
 import csv
 from pathlib import Path
-from bs4 import BeautifulSoup
-from datetime import datetime
+from bs4 import BeautifulSoup, Tag
+from datetime import date, datetime
 from tqdm import tqdm
 
 
 # Path to output folder
 datasets = Path(__file__).resolve().parents[2]/"datasets"
 
+# Type alias for date tuple
+type DateParts = tuple[str, str, str]
+
 
 # Link extractor functions
 
-def full_url(href):
+def full_url(href: str) -> str:
     """Prepend the base URL unless href is already complete."""
     
     base = "https://www.federalreserve.gov"
     return href if href.startswith("http") else base + href
 
 
-def statement_link(panel):
+def statement_link(panel: Tag) -> str | None:
     """Return the statement URL for a meeting panel."""
   
     link = panel.find("a", string="Statement") 
@@ -39,7 +42,7 @@ def statement_link(panel):
                 return a["href"]
 
 
-def minutes_info(panel):
+def minutes_info(panel: Tag) -> tuple[str | None, DateParts | None]:
     """Return the minutes release date and URL for a meeting panel."""
 
     # Regex for release date
@@ -78,7 +81,7 @@ def minutes_info(panel):
     return None, None
 
 
-def conference_link(panel):
+def conference_link(panel: Tag) -> str:
     """Return the press conference transcript URL for a meeting panel"""
 
     # Does not return the immediate link within the panel
@@ -102,7 +105,7 @@ def conference_link(panel):
 
 # Text extractor functions
 
-def clean_text(text):
+def clean_text(text: str | None) -> str:
     """Normalise whitespace in extracted paragraph text."""
 
     if text is None:
@@ -111,7 +114,7 @@ def clean_text(text):
     return " ".join(text.split()).strip()
 
 
-def pdf_text(url):
+def pdf_text(url: str | None) -> str | None:
     """Return the full text of a PDF at the given URL"""
     
     if url is None:
@@ -127,7 +130,7 @@ def pdf_text(url):
     return clean_text(text)
 
 
-def statement_text(url):
+def statement_text(url: str | None) -> str | None:
     """Return cleaned statement text for a statement URL."""
     
     if url is None:
@@ -163,7 +166,7 @@ def statement_text(url):
     return None
 
 
-def minutes_text(url):
+def minutes_text(url: str | None) -> str | None:
     """Return cleaned minutes body text for an HTML minutes URL"""
 
     if url is None:
@@ -202,7 +205,7 @@ def minutes_text(url):
 
 # Other functions
 
-def convert_to_iso(date_text):
+def convert_to_iso(date_text: str | DateParts) -> date | None:
     """Convert a written date to a datetime.date object."""
 
     if date_text is None:
@@ -230,7 +233,7 @@ def convert_to_iso(date_text):
     return None
 
 
-def quick_date(panel, year):
+def quick_date(panel: Tag, year: int) -> tuple[str, str, int]:
     """Return tuple containing date from new-era meeting panel."""
 
     month = panel.find("div", class_=re.compile(r".*fomc-meeting__month.*")).string
@@ -247,7 +250,7 @@ def quick_date(panel, year):
 
 # Main implementation
 
-def main():
+def main() -> None:
     """Scrape FOMC statement, minutes and press conference material from 2000-2026."""
 
     all_rows = []
