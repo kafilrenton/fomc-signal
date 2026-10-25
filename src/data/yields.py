@@ -40,3 +40,57 @@ def load_sheet(sheet: str) -> pd.DataFrame:
     df["mp2_bp"] = df["MP2"] * 100
 
     return df[["date", "ust2y_bp", "ust10y_bp", "2s10s_bp", "mp1_bp", "mp2_bp"]]
+
+
+# CSV builder functions
+
+def build_statement_yields() -> pd.DataFrame:
+    """Join statement-window yield changes to statement dates."""
+
+    stmts = pd.read_csv(datasets / "statement.csv", parse_dates=["date"])
+    stmts["date"] = stmts["date"].dt.date
+
+    merged = stmts[["date"]].merge(load_sheet("Statements"), on="date", how="left")
+
+    print(f"statement_yields.csv: {merged['ust2y_bp'].notna().sum()}/{len(merged)} matched")
+    merged.to_csv(datasets / "statement_yields.csv", index=False)
+    return merged
+
+
+def build_minutes_yields() -> pd.DataFrame:
+    """Join minutes-window yield changes to minutes release dates."""
+
+    mins = pd.read_csv(datasets / "minutes.csv", parse_dates=["minutes_release"])
+    mins["release_date"] = mins["minutes_release"].dt.date
+
+    # Rename USMPD's Date to release_date so the join key is the same
+    targets = load_sheet("Minutes").rename(columns={"date": "release_date"})
+
+    merged = mins[["date", "release_date"]].merge(
+        targets, on="release_date", how="left"
+    )
+
+    print(f"minutes_yields.csv: {merged['ust2y_bp'].notna().sum()}/{len(merged)} matched")
+    merged.to_csv(datasets / "minutes_yields.csv", index=False)
+    return merged
+
+
+def build_conference_yields() -> pd.DataFrame:
+    """Join press-conference-window yield changes to meeting dates."""
+
+    conf = pd.read_csv(datasets / "conference.csv", parse_dates=["date"])
+    conf["date"] = conf["date"].dt.date
+
+    merged = conf[["date"]].merge(
+        load_sheet("Press Conferences"), on="date", how="left"
+    )
+
+    print(f"conference_yields.csv: {merged['ust2y_bp'].notna().sum()}/{len(merged)} matched")
+    merged.to_csv(datasets / "conference_yields.csv", index=False)
+    return merged
+
+
+if __name__ == "__main__":
+    build_statement_yields()
+    build_minutes_yields()
+    build_conference_yields()
