@@ -27,3 +27,15 @@ DICTIONARY_FILTER = {
     "rise", "rising", "increase", "expand", "improve", "strong", "upward", 
     "raise", "high", "rapid"
 }
+
+
+# Sentence filtration function
+
+def filter_sentences(text: str) -> tuple[list[str], list[str]]:
+
+    parts = re.split(SPLIT_REGEX, text)
+    
+    # Filter sentences that contain at least one keyword and are of a sensible length at minimum
+    filtered = [p.strip() for p in parts if len(p.split()) >= 3 and any(w in p.strip().lower() for w in DICTIONARY_FILTER)]
+    
+    return parts, filtered
