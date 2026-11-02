@@ -1,4 +1,3 @@
-# Imports
 import re
 import requests
 import io
@@ -11,7 +10,7 @@ from tqdm import tqdm
 
 
 # Path to output folder
-datasets = Path(__file__).resolve().parents[2]/"datasets"
+DATASETS = Path(__file__).resolve().parents[2]/"datasets"
 
 # Type alias for date tuple
 type DateParts = tuple[str, str, str]
@@ -306,10 +305,10 @@ def main() -> None:
             all_rows.append(row)
 
     # Create output folder on first run, no error if it exists already
-    datasets.mkdir(exist_ok=True)
+    DATASETS.mkdir(exist_ok=True)
 
     # CSV exports for each content type
-    with open(datasets/"statement.csv", "w", newline="", encoding="utf-8") as csvfile:
+    with open(DATASETS/"statement.csv", "w", newline="", encoding="utf-8") as csvfile:
         fieldnames = ["date", "statement"]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
@@ -317,7 +316,7 @@ def main() -> None:
         for row in all_rows:
             writer.writerow({"date": row["date"], "statement": row["statement"]})
 
-    with open(datasets/"minutes.csv", "w", newline="", encoding="utf-8") as csvfile:
+    with open(DATASETS/"minutes.csv", "w", newline="", encoding="utf-8") as csvfile:
         fieldnames = ["date", "minutes_release", "minutes"]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
@@ -325,7 +324,7 @@ def main() -> None:
         for row in all_rows:
             writer.writerow({"date": row["date"], "minutes_release": row["minutes_release"], "minutes": row["minutes"]})
 
-    with open(datasets/"conference.csv", "w", newline="", encoding="utf-8") as csvfile:
+    with open(DATASETS/"conference.csv", "w", newline="", encoding="utf-8") as csvfile:
         fieldnames = ["date", "conference_transcript"]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 

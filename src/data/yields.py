@@ -1,10 +1,9 @@
-# Imports
 from pathlib import Path
 import pandas as pd
 import requests
 
-url = "https://www.frbsf.org/wp-content/uploads/USMPD.xlsx"
-datasets = Path(__file__).resolve().parents[2] / "datasets"
+URL = "https://www.frbsf.org/wp-content/uploads/USMPD.xlsx"
+DATASETS = Path(__file__).resolve().parents[2] / "datasets"
 
 
 # Fetcher function
@@ -12,10 +11,10 @@ datasets = Path(__file__).resolve().parents[2] / "datasets"
 def ensure_usmpd() -> Path:
     """Return the local USMPD.xlsx path, downloading it if missing."""
 
-    path = datasets / "USMPD.xlsx"
+    path = DATASETS / "USMPD.xlsx"
     if not path.exists():
-        datasets.mkdir(exist_ok=True)
-        r = requests.get(url)
+        DATASETS.mkdir(exist_ok=True)
+        r = requests.get(URL)
         r.raise_for_status()
         path.write_bytes(r.content)
     return path
@@ -47,46 +46,42 @@ def load_sheet(sheet: str) -> pd.DataFrame:
 def build_statement_yields() -> pd.DataFrame:
     """Join statement-window yield changes to statement dates."""
 
-    stmts = pd.read_csv(datasets / "statement.csv", parse_dates=["date"])
+    stmts = pd.read_csv(DATASETS / "statement.csv", parse_dates=["date"])
     stmts["date"] = stmts["date"].dt.date
 
     merged = stmts[["date"]].merge(load_sheet("Statements"), on="date", how="left")
 
     print(f"statement_yields.csv: {merged['ust2y_bp'].notna().sum()}/{len(merged)} matched")
-    merged.to_csv(datasets / "statement_yields.csv", index=False)
+    merged.to_csv(DATASETS / "statement_yields.csv", index=False)
     return merged
 
 
 def build_minutes_yields() -> pd.DataFrame:
     """Join minutes-window yield changes to minutes release dates."""
 
-    mins = pd.read_csv(datasets / "minutes.csv", parse_dates=["minutes_release"])
+    mins = pd.read_csv(DATASETS / "minutes.csv", parse_dates=["minutes_release"])
     mins["release_date"] = mins["minutes_release"].dt.date
 
     # Rename USMPD's Date to release_date so the join key is the same
     targets = load_sheet("Minutes").rename(columns={"date": "release_date"})
 
-    merged = mins[["date", "release_date"]].merge(
-        targets, on="release_date", how="left"
-    )
+    merged = mins[["date", "release_date"]].merge(targets, on="release_date", how="left")
 
     print(f"minutes_yields.csv: {merged['ust2y_bp'].notna().sum()}/{len(merged)} matched")
-    merged.to_csv(datasets / "minutes_yields.csv", index=False)
+    merged.to_csv(DATASETS / "minutes_yields.csv", index=False)
     return merged
 
 
 def build_conference_yields() -> pd.DataFrame:
     """Join press-conference-window yield changes to meeting dates."""
 
-    conf = pd.read_csv(datasets / "conference.csv", parse_dates=["date"])
+    conf = pd.read_csv(DATASETS / "conference.csv", parse_dates=["date"])
     conf["date"] = conf["date"].dt.date
 
-    merged = conf[["date"]].merge(
-        load_sheet("Press Conferences"), on="date", how="left"
-    )
+    merged = conf[["date"]].merge(load_sheet("Press Conferences"), on="date", how="left")
 
     print(f"conference_yields.csv: {merged['ust2y_bp'].notna().sum()}/{len(merged)} matched")
-    merged.to_csv(datasets / "conference_yields.csv", index=False)
+    merged.to_csv(DATASETS / "conference_yields.csv", index=False)
     return merged
 
 
