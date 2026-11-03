@@ -28,6 +28,10 @@ DICTIONARY_FILTER = {
     "raise", "high", "rapid"
 }
 
+# Regex pattern enforcing a word boundary at the start
+# For example, allows "low" and its conjugates like "lowest", "lower" etc; but not "follow"
+FILTER_PATTERN = re.compile(r'\b(' + '|'.join(DICTIONARY_FILTER) + r')', re.IGNORECASE)
+
 
 # Sentence filtration function
 
@@ -36,7 +40,7 @@ def filter_sentences(text: str) -> tuple[list[str], list[str]]:
     parts = re.split(SPLIT_REGEX, text)
     
     # Filter sentences that contain at least one keyword and are of a sensible length at minimum
-    filtered = [p.strip() for p in parts if len(p.split()) >= 3 and any(w in p.strip().lower() for w in DICTIONARY_FILTER)]
+    filtered = [p.strip() for p in parts if len(p.split()) >= 3 and FILTER_PATTERN.search(p)]
     
     return parts, filtered
 
