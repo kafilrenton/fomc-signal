@@ -1,6 +1,10 @@
+import os
 from pathlib import Path
 import pandas as pd
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 URL = "https://www.frbsf.org/wp-content/uploads/USMPD.xlsx"
 DATASETS = Path(__file__).resolve().parents[2] / "datasets"
@@ -85,7 +89,46 @@ def build_conference_yields() -> pd.DataFrame:
     return merged
 
 
+def build_daily_fred_data() -> pd.DataFrame:
+    """Download daily Fed Funds rate and Treasury yields from FRED API."""
+
+    api_key = os.getenv("FRED_API_KEY")
+    if not api_key:
+        raise ValueError("FRED_API_KEY not found in .env")
+
+    series_ids = {"DFF": "fed_funds", "DGS2": "ust2y", "DGS10": "ust10y"}
+    dfs = []
+
+    for series_id, col_name in series_ids.items():
+
+        # FRED API JSON endpoint
+        url = (
+            f"https://api.stlouisfed.org/fred/series/observations?"
+            f"series_id={series_id}&api_key={api_key}"
+            f"&file_type=json&observation_start=2000-01-01"
+        )
+        
+        r = requests.get(url)
+        r.raise_for_status()
+        
+        # Parse JSON and set date column as index for alignment
+        df = pd.DataFrame(r.json()["observations"])[["date", "value"]]
+        df = df.set_index("date")
+        
+        # Handling any non-numeric data to return NaN 
+        df[col_name] = pd.to_numeric(df["value"], errors="coerce")
+        dfs.append(df[col_name])
+
+    # Concat the series by date and drop rows with missing values
+    merged = pd.concat(dfs, axis=1).dropna().reset_index()
+
+    merged.to_csv(DATASETS / "daily_yields.csv", index=False)
+    print(f"daily_yields.csv saved: {len(merged)} rows")
+    return merged
+
+
 if __name__ == "__main__":
     build_statement_yields()
     build_minutes_yields()
     build_conference_yields()
+    build_daily_fred_data()
