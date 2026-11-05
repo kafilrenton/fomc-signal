@@ -18,7 +18,7 @@ SPLIT_REGEX = r'(?<!U\.S\.)(?<!U\.K\.)(?<!Mr\.)(?<!Dr\.)(?<=[.!?])\s+(?=[A-Z"(])
 
 # Keyword filter based on Gorodnichenko et al. to keep relevant sentences
 DICTIONARY_FILTER = {
-    "inflation expectation", "interest rate", "bank rate", "fund rate", 
+    "inflation expectation", "interest rate", "bank rate", "fund rate", "funds rate", 
     "price", "economic activity", "inflation", "employment", "unemployment", 
     "growth", "exchange rate", "productivity", "deficit", "demand", "job market",
     "monetary policy", "anchor", "cut", "subdue", "decline", "decrease", "reduce",
@@ -36,6 +36,7 @@ FILTER_PATTERN = re.compile(r'\b(' + '|'.join(DICTIONARY_FILTER) + r')', re.IGNO
 # Sentence filtration function
 
 def filter_sentences(text: str) -> tuple[list[str], list[str]]:
+    """Split text into sentences and isolate those that are policy-relevant"""
 
     parts = re.split(SPLIT_REGEX, text)
     
